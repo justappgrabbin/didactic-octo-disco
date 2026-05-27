@@ -26,7 +26,14 @@ type Listener = (message: SynthiaMessage) => void;
 const listeners = new Set<Listener>();
 const outboxKey = 'synthia:didactic-octo-disco:outbox';
 
+function safeRandomId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 function readOutbox(): SynthiaMessage[] {
+  if (typeof localStorage === 'undefined') return [];
   try {
     return JSON.parse(localStorage.getItem(outboxKey) || '[]') as SynthiaMessage[];
   } catch {
@@ -35,6 +42,7 @@ function readOutbox(): SynthiaMessage[] {
 }
 
 function writeOutbox(messages: SynthiaMessage[]) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(outboxKey, JSON.stringify(messages.slice(-500)));
 }
 
@@ -45,7 +53,7 @@ export function subscribeSynthiaBridge(listener: Listener) {
 
 export function emitToSynthia<TPayload>(type: SynthiaMessageType, payload: TPayload) {
   const message: SynthiaMessage<TPayload> = {
-    id: crypto.randomUUID(),
+    id: safeRandomId(),
     type,
     source: 'didactic-octo-disco',
     target: 'synthia-server',
@@ -57,7 +65,10 @@ export function emitToSynthia<TPayload>(type: SynthiaMessageType, payload: TPayl
   writeOutbox([...readOutbox(), message]);
   listeners.forEach(listener => listener(message));
 
-  window.dispatchEvent(new CustomEvent('synthia:morph-message', { detail: message }));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('synthia:morph-message', { detail: message }));
+  }
+
   return message;
 }
 
@@ -75,11 +86,12 @@ export function emitNodesIngested(nodes: MeshNode[]) {
     nodeId: node.id,
     title: node.title,
     kind: node.kind,
-    mime: node.mime,
-    size: node.size,
-    department: node.department,
+    sourceType: node.sourceType,
     departmentSlug: node.departmentSlug,
     metadata: node.metadata,
+    state: node.state,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
   }));
 }
 
@@ -90,7 +102,6 @@ export function emitNodeUpdated(node: MeshNode) {
     state: node.state,
     x: node.x,
     y: node.y,
-    department: node.department,
     departmentSlug: node.departmentSlug,
     updatedAt: node.updatedAt,
   });
